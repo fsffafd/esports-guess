@@ -134,6 +134,16 @@ app.post('/api/bet', requireAuth, async (req, res) => {
     if (!match) return res.status(404).json({ error: '比赛不存在' });
     if (match.status !== 'upcoming') return res.status(400).json({ error: '比赛已开始或已结束，无法投注' });
 
+    if (match.match_time) {
+      const matchTime = new Date(match.match_time);
+      const now = new Date();
+      const beijingNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+      const beijingMatchTime = new Date(matchTime.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+      if (beijingMatchTime < beijingNow) {
+        return res.status(400).json({ error: '比赛时间已过，无法投注' });
+      }
+    }
+
     const user = await queryOne('SELECT points FROM users WHERE id = ?', [req.userId]);
     if (user.points < amount) return res.status(400).json({ error: '积分不足' });
 

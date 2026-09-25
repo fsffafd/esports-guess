@@ -175,11 +175,23 @@ function renderAdminMatches(matches) {
     return;
   }
 
-  list.innerHTML = matches.map(m => `
+  function isExpired(m) {
+    if (m.status !== 'upcoming' || !m.match_time) return false;
+    const matchTime = new Date(m.match_time);
+    const now = new Date();
+    const beijingNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    const beijingMatchTime = new Date(matchTime.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    return beijingMatchTime < beijingNow;
+  }
+
+  list.innerHTML = matches.map(m => {
+    const expired = isExpired(m);
+    const displayStatus = expired ? 'finished' : m.status;
+    return `
     <div class="card">
       <div class="match-header">
         <span class="match-tournament">${esc(m.tournament_name || '友谊赛')}</span>
-        <span class="match-status status-${m.status}">${statusMap[m.status]}</span>
+        <span class="match-status status-${displayStatus}">${statusMap[displayStatus]}</span>
       </div>
       <div class="match-teams">
         <div class="team-name">${esc(m.team1)}</div>
@@ -188,8 +200,11 @@ function renderAdminMatches(matches) {
       </div>
       ${m.match_time ? `<div class="match-time">${formatTime(m.match_time)}</div>` : ''}
       <div class="match-actions">
-        ${m.status === 'upcoming' ? `
+        ${m.status === 'upcoming' && !expired ? `
           <button class="btn btn-primary btn-sm" onclick="startMatch(${m.id})">开始比赛</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteMatch(${m.id})">删除</button>
+        ` : ''}
+        ${m.status === 'upcoming' && expired ? `
           <button class="btn btn-danger btn-sm" onclick="deleteMatch(${m.id})">删除</button>
         ` : ''}
         ${m.status === 'betting' ? `
@@ -201,7 +216,7 @@ function renderAdminMatches(matches) {
         ` : ''}
       </div>
     </div>
-  `).join('');
+  `;}).join('');
 }
 
 window.startMatch = async function(id) {

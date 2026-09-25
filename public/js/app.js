@@ -177,6 +177,15 @@ async function loadMatches() {
   }
 }
 
+function isMatchExpired(m) {
+  if (m.status !== 'upcoming' || !m.match_time) return false;
+  const matchTime = new Date(m.match_time);
+  const now = new Date();
+  const beijingNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+  const beijingMatchTime = new Date(matchTime.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+  return beijingMatchTime < beijingNow;
+}
+
 function renderMatches() {
   const list = document.getElementById('matches-list');
   const filtered = currentFilter === 'all' ? matchesCache : matchesCache.filter(m => m.status === currentFilter);
@@ -188,14 +197,16 @@ function renderMatches() {
 
   list.innerHTML = filtered.map(m => {
     const statusMap = { upcoming: '待开始', betting: '进行中', finished: '已结束' };
-    const statusClass = 'status-' + m.status;
+    const expired = isMatchExpired(m);
+    const displayStatus = expired ? 'finished' : m.status;
+    const statusClass = 'status-' + displayStatus;
     const winnerText = m.winner ? (m.winner === 1 ? m.team1 : m.team2) : '';
 
     return `
       <div class="card match-card">
         <div class="match-header">
           <span class="match-tournament">${esc(m.tournament_name || '友谊赛')}</span>
-          <span class="match-status ${statusClass}">${statusMap[m.status]}</span>
+          <span class="match-status ${statusClass}">${statusMap[displayStatus]}</span>
         </div>
         <div class="match-teams">
           <div class="team-name">${esc(m.team1)}${m.winner === 1 ? ' <span class="winner-badge">胜</span>' : ''}</div>
@@ -204,7 +215,7 @@ function renderMatches() {
         </div>
         ${m.match_time ? `<div class="match-time">${formatTime(m.match_time)}</div>` : ''}
         <div class="match-actions">
-          ${m.status === 'upcoming' ? `
+          ${m.status === 'upcoming' && !expired ? `
             <button class="btn btn-primary" onclick="openBetModal(${m.id})">投注</button>
           ` : ''}
           ${m.status === 'finished' && winnerText ? `
