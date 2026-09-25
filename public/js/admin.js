@@ -466,7 +466,7 @@ function formatTime(t) {
   try {
     const iso = t.includes('T') ? t : t.replace(' ', 'T');
     const d = new Date(iso);
-    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   } catch {
     return t;
   }
