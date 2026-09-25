@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0e17">
+  <title>电竞竞猜</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Login/Register Screen -->
+    <div id="auth-screen" class="screen active">
+      <div class="auth-container">
+        <div class="logo">
+          <div class="logo-icon">&#9889;</div>
+          <h1>电竞竞猜</h1>
+          <p class="subtitle">ESPORTS PREDICT</p>
+        </div>
+        <div class="auth-tabs">
+          <button class="tab-btn active" data-tab="login">登录</button>
+          <button class="tab-btn" data-tab="register">注册</button>
+        </div>
+        <form id="login-form" class="auth-form active">
+          <div class="input-group">
+            <input type="text" id="login-username" placeholder="用户名" required autocomplete="username">
+          </div>
+          <div class="input-group">
+            <input type="password" id="login-password" placeholder="密码" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">登录</button>
+        </form>
+        <form id="register-form" class="auth-form">
+          <div class="input-group">
+            <input type="text" id="reg-username" placeholder="用户名 (至少2位)" required autocomplete="username">
+          </div>
+          <div class="input-group">
+            <input type="password" id="reg-password" placeholder="密码 (至少4位)" required autocomplete="new-password">
+          </div>
+          <div class="input-group">
+            <input type="password" id="reg-password2" placeholder="确认密码" required autocomplete="new-password">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">注册</button>
+        </form>
+        <div id="auth-error" class="error-msg"></div>
+      </div>
+    </div>
+
+    <!-- Main Screen -->
+    <div id="main-screen" class="screen">
+      <nav class="navbar">
+        <div class="nav-brand">&#9889; 电竞竞猜</div>
+        <div class="nav-right">
+          <span id="user-points" class="points-badge">0</span>
+          <span id="user-name" class="user-name"></span>
+          <button id="logout-btn" class="btn btn-sm">退出</button>
+        </div>
+      </nav>
+
+      <div class="tab-nav">
+        <button class="nav-tab active" data-page="matches">比赛竞猜</button>
+        <button class="nav-tab" data-page="tournament">锦标赛预测</button>
+        <button class="nav-tab" data-page="mybets">我的投注</button>
+        <button class="nav-tab" data-page="leaderboard">排行榜</button>
+      </div>
+
+      <div class="content">
+        <!-- Matches Page -->
+        <div id="page-matches" class="page active">
+          <div class="section-header">
+            <h2>比赛竞猜</h2>
+            <div class="filter-btns">
+              <button class="filter-btn active" data-filter="all">全部</button>
+              <button class="filter-btn" data-filter="upcoming">待开始</button>
+              <button class="filter-btn" data-filter="betting">进行中</button>
+              <button class="filter-btn" data-filter="finished">已结束</button>
+            </div>
+          </div>
+          <div id="matches-list" class="card-list"></div>
+        </div>
+
+        <!-- Tournament Page -->
+        <div id="page-tournament" class="page">
+          <div class="section-header">
+            <h2>锦标赛预测</h2>
+          </div>
+          <div class="multiplier-info">
+            <span class="badge">冠军 x20</span>
+            <span class="badge">亚军 x10</span>
+            <span class="badge">季军 x7</span>
+            <span class="badge">四强 x4</span>
+            <span class="badge">八强 x3</span>
+            <span class="badge">出线 x2</span>
+          </div>
+          <div id="tournaments-list" class="card-list"></div>
+        </div>
+
+        <!-- My Bets Page -->
+        <div id="page-mybets" class="page">
+          <div class="section-header">
+            <h2>我的投注</h2>
+          </div>
+          <h3 class="sub-header">比赛投注</h3>
+          <div id="my-bets-list" class="card-list"></div>
+          <h3 class="sub-header">锦标赛预测</h3>
+          <div id="my-predictions-list" class="card-list"></div>
+        </div>
+
+        <!-- Leaderboard Page -->
+        <div id="page-leaderboard" class="page">
+          <div class="section-header">
+            <h2>排行榜</h2>
+          </div>
+          <div id="leaderboard-list" class="leaderboard"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modal-title"></h3>
+          <button class="modal-close" id="modal-close">&times;</button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

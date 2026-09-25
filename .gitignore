@@ -1,0 +1,6 @@
+node_modules/
+data.db
+*.log
+.DS_Store
+esports-guess.zip
+.env

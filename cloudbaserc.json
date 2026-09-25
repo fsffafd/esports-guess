@@ -1,0 +1,18 @@
+{
+  "envId": "你的环境ID",
+  "version": "2.0",
+  "functionRoot": "./functions",
+  "functions": [
+    {
+      "name": "api",
+      "timeout": 30,
+      "runtime": "Nodejs16.13",
+      "memory": 256,
+      "handler": "index.main",
+      "envVariables": {
+        "JWT_SECRET": "esports-guess-secret-2026"
+      },
+      "installDependency": true
+    }
+  ]
+}

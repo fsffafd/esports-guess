@@ -1,0 +1,11 @@
+{
+  "name": "esports-api",
+  "version": "1.0.0",
+  "description": "Esports guessing API cloud function",
+  "main": "index.js",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "@cloudbase/node-sdk": "^2.6.0"
+  }
+}

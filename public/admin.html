@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0e17">
+  <title>管理后台 - 电竞竞猜</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="admin-app">
+    <!-- Login -->
+    <div id="admin-auth" class="screen active">
+      <div class="auth-container">
+        <div class="logo">
+          <div class="logo-icon">&#9881;</div>
+          <h1>管理后台</h1>
+          <p class="subtitle">ADMIN PANEL</p>
+        </div>
+        <form id="admin-login-form" class="auth-form active">
+          <div class="input-group">
+            <input type="text" id="admin-username" placeholder="管理员账号" required>
+          </div>
+          <div class="input-group">
+            <input type="password" id="admin-password" placeholder="密码" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">登录</button>
+        </form>
+        <div id="admin-auth-error" class="error-msg"></div>
+      </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="admin-dashboard" class="screen">
+      <nav class="navbar">
+        <div class="nav-brand">&#9881; 管理后台</div>
+        <div class="nav-right">
+          <a href="/" class="btn btn-sm">返回前台</a>
+          <button id="admin-logout-btn" class="btn btn-sm">退出</button>
+        </div>
+      </nav>
+
+      <div class="tab-nav">
+        <button class="admin-tab active" data-page="admin-matches">赛程管理</button>
+        <button class="admin-tab" data-page="admin-tournaments">锦标赛管理</button>
+        <button class="admin-tab" data-page="admin-users">用户管理</button>
+      </div>
+
+      <div class="content">
+        <!-- Matches Management -->
+        <div id="page-admin-matches" class="page active">
+          <div class="section-header">
+            <h2>赛程管理</h2>
+            <button class="btn btn-primary" id="add-match-btn">+ 添加比赛</button>
+          </div>
+
+          <div id="add-match-form" class="admin-form hidden">
+            <h3>添加新比赛</h3>
+            <div class="form-row">
+              <div class="input-group">
+                <label>队伍1</label>
+                <input type="text" id="new-team1" placeholder="队伍1名称">
+              </div>
+              <span class="vs-label">VS</span>
+              <div class="input-group">
+                <label>队伍2</label>
+                <input type="text" id="new-team2" placeholder="队伍2名称">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="input-group">
+                <label>比赛时间</label>
+                <input type="datetime-local" id="new-match-time">
+              </div>
+              <div class="input-group">
+                <label>所属赛事</label>
+                <input type="text" id="new-tournament-name" placeholder="赛事名称（可选）">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" id="save-match-btn">保存</button>
+              <button class="btn" id="cancel-match-btn">取消</button>
+            </div>
+          </div>
+
+          <div id="admin-matches-list" class="card-list"></div>
+        </div>
+
+        <!-- Tournaments Management -->
+        <div id="page-admin-tournaments" class="page">
+          <div class="section-header">
+            <h2>锦标赛管理</h2>
+            <button class="btn btn-primary" id="add-tournament-btn">+ 创建锦标赛</button>
+          </div>
+
+          <div id="add-tournament-form" class="admin-form hidden">
+            <h3>创建锦标赛</h3>
+            <div class="input-group">
+              <label>锦标赛名称</label>
+              <input type="text" id="new-tournament-name-input" placeholder="例如: 2026 LPL 春季赛">
+            </div>
+            <div class="input-group">
+              <label>参赛队伍 (每行一支)</label>
+              <textarea id="new-tournament-teams" rows="6" placeholder="T1&#10;JDG&#10;BLG&#10;WBG"></textarea>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" id="save-tournament-btn">创建</button>
+              <button class="btn" id="cancel-tournament-btn">取消</button>
+            </div>
+          </div>
+
+          <div id="admin-tournaments-list" class="card-list"></div>
+        </div>
+
+        <!-- Users Management -->
+        <div id="page-admin-users" class="page">
+          <div class="section-header">
+            <h2>用户管理</h2>
+          </div>
+          <div id="admin-users-list" class="admin-table-wrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="admin-modal-overlay" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="admin-modal-title"></h3>
+          <button class="modal-close" id="admin-modal-close">&times;</button>
+        </div>
+        <div id="admin-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <div id="admin-toast" class="toast"></div>
+  </div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>
