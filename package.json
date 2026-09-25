@@ -14,7 +14,7 @@
     "deploy": "npm run deploy:fn && npm run deploy:hosting"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
+    "@neondatabase/serverless": "^0.10.4",
     "bcryptjs": "^2.4.3",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.2"

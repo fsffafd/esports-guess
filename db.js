@@ -1,77 +1,78 @@
-const { createClient } = require('@libsql/client');
+const { Pool } = require('@neondatabase/serverless');
 const bcrypt = require('bcryptjs');
 
-const url = process.env.TURSO_DATABASE_URL;
-const authToken = process.env.TURSO_AUTH_TOKEN || '';
+const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
-if (!url) {
-  throw new Error('TURSO_DATABASE_URL environment variable is not set');
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL environment variable is not set');
 }
 
-const client = createClient({ url, authToken });
+const pool = new Pool({ connectionString: databaseUrl });
+
+function convertPlaceholders(sqlStr) {
+  let idx = 0;
+  return sqlStr.replace(/\?/g, () => `$${++idx}`);
+}
 
 async function initDb() {
-  await client.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       points INTEGER DEFAULT 10000,
       is_admin INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  await client.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS matches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       team1 TEXT NOT NULL,
       team2 TEXT NOT NULL,
-      match_time DATETIME,
+      match_time TIMESTAMP,
       status TEXT DEFAULT 'upcoming',
       winner INTEGER DEFAULT NULL,
       tournament_name TEXT DEFAULT '',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  await client.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS bets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
       match_id INTEGER NOT NULL,
       bet_team INTEGER NOT NULL,
       amount INTEGER NOT NULL,
       status TEXT DEFAULT 'pending',
       payout INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      FOREIGN KEY (match_id) REFERENCES matches(id)
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  await client.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tournaments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       status TEXT DEFAULT 'upcoming',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  await client.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tournament_teams (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       tournament_id INTEGER NOT NULL,
       team_name TEXT NOT NULL,
-      eliminated INTEGER DEFAULT 0,
-      FOREIGN KEY (tournament_id) REFERENCES tournaments(id)
+      eliminated INTEGER DEFAULT 0
     )
   `);
 
-  await client.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tournament_predictions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
       tournament_id INTEGER NOT NULL,
       prediction_type TEXT NOT NULL,
@@ -79,38 +80,42 @@ async function initDb() {
       bet_amount INTEGER NOT NULL,
       status TEXT DEFAULT 'pending',
       payout INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
-      FOREIGN KEY (team_id) REFERENCES tournament_teams(id)
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  const adminResult = await client.execute('SELECT id FROM users WHERE is_admin = 1');
+  const adminResult = await pool.query('SELECT id FROM users WHERE is_admin = 1');
   if (adminResult.rows.length === 0) {
     const hash = bcrypt.hashSync('admin123', 10);
-    await client.execute({
-      sql: 'INSERT INTO users (username, password, points, is_admin) VALUES (?, ?, ?, ?)',
-      args: ['admin', hash, 999999, 1]
-    });
+    await pool.query('INSERT INTO users (username, password, points, is_admin) VALUES ($1, $2, $3, $4)', ['admin', hash, 999999, 1]);
   }
 }
 
-async function queryAll(sql, params = []) {
-  const result = await client.execute({ sql, args: params });
+async function queryAll(sqlStr, params = []) {
+  const finalSql = convertPlaceholders(sqlStr);
+  const result = await pool.query(finalSql, params);
   return result.rows;
 }
 
-async function queryOne(sql, params = []) {
-  const rows = await queryAll(sql, params);
+async function queryOne(sqlStr, params = []) {
+  const rows = await queryAll(sqlStr, params);
   return rows.length > 0 ? rows[0] : null;
 }
 
-async function runSql(sql, params = []) {
-  const result = await client.execute({ sql, args: params });
+async function runSql(sqlStr, params = []) {
+  const finalSql = convertPlaceholders(sqlStr);
+  const isInsert = /^\s*INSERT/i.test(finalSql);
+  const sqlWithReturning = isInsert && !/RETURNING/i.test(finalSql)
+    ? finalSql.replace(/;?\s*$/, ' RETURNING id')
+    : finalSql;
+  const result = await pool.query(sqlWithReturning, params);
+  let lastInsertRowid = 0;
+  if (isInsert && result.rows && result.rows.length > 0) {
+    lastInsertRowid = result.rows[0].id;
+  }
   return {
-    lastInsertRowid: Number(result.lastInsertRowid) || 0,
-    changes: result.rowsAffected || 0
+    lastInsertRowid: Number(lastInsertRowid) || 0,
+    changes: result.rowCount || 0
   };
 }
 
