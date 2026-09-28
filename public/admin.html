@@ -79,6 +79,17 @@
                 <input type="text" id="new-tournament-name" placeholder="赛事名称（可选）">
               </div>
             </div>
+            <div class="form-row">
+              <div class="input-group">
+                <label>赛制</label>
+                <select id="new-bo-format">
+                  <option value="BO1">BO1</option>
+                  <option value="BO3" selected>BO3</option>
+                  <option value="BO5">BO5</option>
+                  <option value="BO7">BO7</option>
+                </select>
+              </div>
+            </div>
             <div class="form-actions">
               <button class="btn btn-primary" id="save-match-btn">保存</button>
               <button class="btn" id="cancel-match-btn">取消</button>

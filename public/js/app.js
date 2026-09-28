@@ -1,12 +1,10 @@
 // ==================== CONFIG ====================
-// CloudBase部署时，把这里改成你的云函数API地址
-// 例如：const API_BASE = 'https://service-xxxxx@shanghai.apigw.tencentcs.com/release';
-// 如果配置了API网关路由，保持空字符串即可
 const API_BASE = '';
 
 // ==================== STATE ====================
 let currentUser = null;
-let currentFilter = 'all';
+let selectedDate = '';
+let tournamentFilter = '';
 let matchesCache = [];
 
 // ==================== API ====================
@@ -132,7 +130,8 @@ async function loadUser() {
     document.getElementById('user-name').textContent = currentUser.username;
     document.getElementById('user-points').textContent = currentUser.points.toLocaleString();
     showScreen('main-screen');
-    loadMatches();
+    loadDateTabs();
+    loadTournamentFilter();
   } catch {
     showScreen('auth-screen');
   }
@@ -151,82 +150,178 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById('page-' + tab.dataset.page).classList.add('active');
 
-    if (tab.dataset.page === 'matches') loadMatches();
+    if (tab.dataset.page === 'matches') {
+      loadDateTabs();
+      loadTournamentFilter();
+    }
     else if (tab.dataset.page === 'tournament') loadTournaments();
     else if (tab.dataset.page === 'mybets') loadMyBets();
-    else if (tab.dataset.page === 'leaderboard') loadLeaderboard();
+    else if (tab.dataset.page === 'leaderboard') loadDailyLeaderboard();
   });
 });
 
-// ==================== MATCHES ====================
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentFilter = btn.dataset.filter;
-    renderMatches();
-  });
-});
-
-async function loadMatches() {
+// ==================== DATE TABS ====================
+async function loadDateTabs() {
   try {
-    matchesCache = await api('/api/matches');
-    renderMatches();
+    const dates = await api('/api/matches/dates');
+    renderDateTabs(dates);
+    if (!selectedDate) {
+      const today = dates.find(d => d.isToday);
+      selectedDate = today ? today.date : dates[0].date;
+    }
+    highlightDateTab();
+    loadMatchesForDate();
   } catch (err) {
     showToast(err.message, true);
   }
 }
 
-function isMatchExpired(m) {
-  if (m.status !== 'upcoming' || !m.match_time) return false;
-  const matchTime = new Date(m.match_time);
-  const now = new Date();
-  const beijingNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
-  const beijingMatchTime = new Date(matchTime.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
-  return beijingMatchTime < beijingNow;
+function renderDateTabs(dates) {
+  const container = document.getElementById('date-tabs');
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+
+  container.innerHTML = dates.map(d => {
+    const dateObj = new Date(d.date + 'T00:00:00+08:00');
+    const weekday = '周' + weekdays[dateObj.getDay()];
+    const dayStr = d.date.slice(5).replace('-', '/');
+    const classes = ['date-tab'];
+    if (d.isToday) classes.push('today');
+    if (d.date === selectedDate) classes.push('active');
+
+    return `
+      <button class="${classes.join(' ')}" data-date="${d.date}">
+        <span class="date-weekday">${d.isToday ? '今天' : weekday}</span>
+        <span class="date-day">${dayStr}</span>
+        ${d.hasMatches ? '<span class="date-dot"></span>' : ''}
+      </button>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.date-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedDate = btn.dataset.date;
+      highlightDateTab();
+      loadMatchesForDate();
+    });
+  });
 }
 
-function renderMatches() {
-  const list = document.getElementById('matches-list');
-  const filtered = currentFilter === 'all' ? matchesCache : matchesCache.filter(m => m.status === currentFilter);
+function highlightDateTab() {
+  document.querySelectorAll('.date-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.date === selectedDate);
+  });
+}
 
-  if (filtered.length === 0) {
-    list.innerHTML = '<div class="card" style="text-align:center;color:var(--text-muted);">暂无比赛</div>';
+// ==================== TOURNAMENT FILTER ====================
+async function loadTournamentFilter() {
+  try {
+    const list = await api('/api/matches/tournaments-list');
+    const select = document.getElementById('tournament-filter');
+    const current = select.value;
+    select.innerHTML = '<option value="">全部赛事</option>' +
+      list.map(t => `<option value="${esc(t.tournament_name)}">${esc(t.tournament_name)} (${t.match_count})</option>`).join('');
+    if (current) select.value = current;
+
+    select.onchange = () => {
+      tournamentFilter = select.value;
+      loadMatchesForDate();
+    };
+  } catch {}
+}
+
+// ==================== MATCHES ====================
+async function loadMatchesForDate() {
+  try {
+    let url = '/api/matches?date=' + selectedDate;
+    if (tournamentFilter) url += '&tournament=' + encodeURIComponent(tournamentFilter);
+    matchesCache = await api(url);
+    renderMatchesGrouped();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+function renderMatchesGrouped() {
+  const container = document.getElementById('matches-grouped');
+
+  if (matchesCache.length === 0) {
+    container.innerHTML = '<div class="card" style="text-align:center;color:var(--text-muted);">当日暂无比赛</div>';
     return;
   }
 
-  list.innerHTML = filtered.map(m => {
-    const statusMap = { upcoming: '待开始', betting: '进行中', finished: '已结束' };
-    const expired = isMatchExpired(m);
-    const displayStatus = expired ? 'finished' : m.status;
-    const statusClass = 'status-' + displayStatus;
-    const winnerText = m.winner ? (m.winner === 1 ? m.team1 : m.team2) : '';
+  const groups = {};
+  for (const m of matchesCache) {
+    const key = m.tournament_name || '友谊赛';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(m);
+  }
 
-    return `
-      <div class="card match-card">
-        <div class="match-header">
-          <span class="match-tournament">${esc(m.tournament_name || '友谊赛')}</span>
-          <span class="match-status ${statusClass}">${statusMap[displayStatus]}</span>
-        </div>
-        <div class="match-teams">
-          <div class="team-name">${esc(m.team1)}${m.winner === 1 ? ' <span class="winner-badge">胜</span>' : ''}</div>
-          <div class="vs-text">VS</div>
-          <div class="team-name">${esc(m.team2)}${m.winner === 2 ? ' <span class="winner-badge">胜</span>' : ''}</div>
-        </div>
-        ${m.match_time ? `<div class="match-time">${formatTime(m.match_time)}</div>` : ''}
-        <div class="match-actions">
-          ${m.status === 'upcoming' && !expired ? `
-            <button class="btn btn-primary" onclick="openBetModal(${m.id})">投注</button>
-          ` : ''}
-          ${m.status === 'finished' && winnerText ? `
-            <span style="font-size:13px;color:var(--success);">胜者: ${esc(winnerText)}</span>
-          ` : ''}
-        </div>
+  container.innerHTML = Object.entries(groups).map(([name, matches]) => `
+    <div class="tournament-group">
+      <div class="tournament-group-header">
+        <span class="tournament-group-name">${esc(name)}</span>
+        <span class="tournament-group-count">${matches.length}场</span>
       </div>
-    `;
-  }).join('');
+      ${matches.map(m => renderMatchCard(m)).join('')}
+    </div>
+  `).join('');
 }
 
+function renderMatchCard(m) {
+  const timeStr = formatMatchTime(m.match_time);
+  const boFormat = m.bo_format || 'BO3';
+  const statusMap = { upcoming: '待开始', betting: '进行中', finished: '已结束' };
+
+  let statusHtml = '';
+  if (m.status === 'betting') {
+    statusHtml = '<span class="live-indicator"><span class="live-dot"></span>LIVE</span>';
+  } else if (m.status === 'finished') {
+    statusHtml = '<span class="match-hupu-status status-finished">已结束</span>';
+  } else {
+    statusHtml = `<span class="match-hupu-status status-upcoming">${statusMap[m.status]}</span>`;
+  }
+
+  const score1Display = m.status === 'finished' || m.status === 'betting' ? (m.score1 || 0) : '';
+  const score2Display = m.status === 'finished' || m.status === 'betting' ? (m.score2 || 0) : '';
+  const winnerClass1 = m.winner === 1 ? ' winner' : '';
+  const winnerClass2 = m.winner === 2 ? ' winner' : '';
+
+  let gameScoresHtml = '';
+  if (m.game_scores) {
+    gameScoresHtml = `<div class="game-scores">${esc(m.game_scores)}</div>`;
+  }
+
+  let actionHtml = '';
+  if (m.status === 'upcoming') {
+    actionHtml = `<button class="btn btn-primary btn-sm" onclick="openBetModal(${m.id})">投注</button>`;
+  }
+
+  return `
+    <div class="match-card-hupu" data-match-id="${m.id}">
+      <div class="match-hupu-time">
+        <span class="match-hupu-time-text">${timeStr}</span>
+        <span class="bo-label">${esc(boFormat)}</span>
+      </div>
+      <div class="match-hupu-teams">
+        <div class="match-hupu-row">
+          <span class="match-hupu-team${winnerClass1}">${esc(m.team1)}</span>
+          <span class="match-hupu-score${winnerClass1}">${score1Display}</span>
+        </div>
+        <div class="match-hupu-row">
+          <span class="match-hupu-team${winnerClass2}">${esc(m.team2)}</span>
+          <span class="match-hupu-score${winnerClass2}">${score2Display}</span>
+        </div>
+        ${gameScoresHtml}
+      </div>
+      <div class="match-hupu-right">
+        ${statusHtml}
+        ${actionHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ==================== BET MODAL ====================
 window.openBetModal = function(matchId) {
   const match = matchesCache.find(m => m.id === matchId);
   if (!match) return;
@@ -274,7 +369,7 @@ window.submitBet = async function(matchId) {
     currentUser.points = data.remainingPoints;
     document.getElementById('user-points').textContent = currentUser.points.toLocaleString();
     closeModal();
-    loadMatches();
+    loadMatchesForDate();
   } catch (err) {
     showToast(err.message, true);
   }
@@ -416,12 +511,15 @@ function renderMyBets(bets, predictions) {
       const betTeam = b.bet_team === 1 ? b.team1 : b.team2;
       const statusMap = { pending: '待结算', won: '已赢', lost: '已输' };
       const statusClass = 'bet-status-' + b.status;
+      const scoreInfo = (b.bo_format && (b.match_status === 'finished' || b.match_status === 'betting'))
+        ? ` | ${b.score1 || 0}:${b.score2 || 0}` : '';
       return `
         <div class="card bet-card">
           <div class="bet-info">
             <div class="bet-match">${esc(b.team1)} vs ${esc(b.team2)}</div>
             <div class="bet-detail">
               投注: ${esc(betTeam)} | <span class="${statusClass}">${statusMap[b.status]}</span>
+              ${scoreInfo}
               ${b.tournament_name ? ` | ${esc(b.tournament_name)}` : ''}
             </div>
           </div>
@@ -462,32 +560,54 @@ function renderMyBets(bets, predictions) {
   }
 }
 
-// ==================== LEADERBOARD ====================
-async function loadLeaderboard() {
+// ==================== DAILY LEADERBOARD ====================
+async function loadDailyLeaderboard() {
   try {
-    const users = await api('/api/leaderboard');
-    renderLeaderboard(users);
+    const data = await api('/api/leaderboard/daily');
+    renderDailyLeaderboard(data);
   } catch (err) {
     showToast(err.message, true);
   }
 }
 
-function renderLeaderboard(users) {
+function renderDailyLeaderboard(data) {
+  const dateLabel = document.getElementById('leaderboard-date');
+  const summary = document.getElementById('lb-summary');
   const list = document.getElementById('leaderboard-list');
-  if (users.length === 0) {
-    list.innerHTML = '<div class="card" style="text-align:center;color:var(--text-muted);">暂无数据</div>';
+
+  dateLabel.textContent = data.date || '';
+
+  const rankings = data.rankings || [];
+
+  if (rankings.length === 0) {
+    summary.innerHTML = '';
+    list.innerHTML = '<div class="card" style="text-align:center;color:var(--text-muted);">今日暂无结算记录</div>';
     return;
   }
 
-  list.innerHTML = '<div class="leaderboard">' + users.map((u, i) => {
+  const totalProfit = rankings.reduce((s, r) => s + r.dailyProfit, 0);
+  const winners = rankings.filter(r => r.dailyProfit > 0).length;
+  const losers = rankings.filter(r => r.dailyProfit < 0).length;
+
+  summary.innerHTML = `
+    <div class="lb-summary-item">参与人数: <strong>${rankings.length}</strong></div>
+    <div class="lb-summary-item">盈利: <strong style="color:var(--success)">${winners}人</strong></div>
+    <div class="lb-summary-item">亏损: <strong style="color:var(--danger)">${losers}人</strong></div>
+    <div class="lb-summary-item">总盈亏: <strong class="${totalProfit >= 0 ? 'profit-positive' : 'profit-negative'}">${totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString()}</strong></div>
+  `;
+
+  list.innerHTML = '<div class="leaderboard">' + rankings.map((u, i) => {
     const rank = i + 1;
     const rankClass = rank <= 3 ? ' top' + rank : '';
     const medal = rank === 1 ? '&#129351;' : rank === 2 ? '&#129352;' : rank === 3 ? '&#129353;' : '';
+    const profitClass = u.dailyProfit > 0 ? 'profit-positive' : u.dailyProfit < 0 ? 'profit-negative' : 'profit-zero';
+    const profitStr = (u.dailyProfit >= 0 ? '+' : '') + u.dailyProfit.toLocaleString();
+
     return `
       <div class="lb-row">
         <div class="lb-rank${rankClass}">${medal || rank}</div>
         <div class="lb-name">${esc(u.username)}</div>
-        <div class="lb-points">${u.points.toLocaleString()}</div>
+        <div class="lb-profit ${profitClass}">${profitStr}</div>
       </div>
     `;
   }).join('') + '</div>';
@@ -498,6 +618,17 @@ function esc(str) {
   const div = document.createElement('div');
   div.textContent = str || '';
   return div.innerHTML;
+}
+
+function formatMatchTime(t) {
+  if (!t) return '--:--';
+  try {
+    const iso = t.includes('T') ? t : t.replace(' ', 'T');
+    const d = new Date(iso);
+    return d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '--:--';
+  }
 }
 
 function formatTime(t) {
@@ -514,7 +645,6 @@ function formatTime(t) {
 // ==================== INIT ====================
 loadUser();
 
-// Service Worker
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }

@@ -48,6 +48,22 @@ async function requireAdmin(req, res, next) {
   }
 }
 
+function getBeijingToday() {
+  const now = new Date();
+  const beijing = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+  const y = beijing.getFullYear();
+  const m = String(beijing.getMonth() + 1).padStart(2, '0');
+  const d = String(beijing.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getBeijingDateRange(dateStr) {
+  return {
+    start: `${dateStr}T00:00:00+08:00`,
+    end: `${dateStr}T23:59:59.999+08:00`
+  };
+}
+
 // ==================== AUTH ====================
 
 app.post('/api/register', async (req, res) => {
@@ -99,14 +115,72 @@ app.get('/api/me', requireAuth, async (req, res) => {
 
 app.get('/api/matches', requireAuth, async (req, res) => {
   try {
-    const status = req.query.status;
-    let matches;
-    if (status) {
-      matches = await queryAll('SELECT * FROM matches WHERE status = ? ORDER BY match_time DESC', [status]);
-    } else {
-      matches = await queryAll('SELECT * FROM matches ORDER BY match_time DESC');
+    const { date, status, tournament } = req.query;
+    let sql = 'SELECT * FROM matches WHERE 1=1';
+    const params = [];
+
+    if (date) {
+      const { start, end } = getBeijingDateRange(date);
+      sql += ' AND match_time >= ? AND match_time <= ?';
+      params.push(start, end);
     }
+    if (status) {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+    if (tournament) {
+      sql += ' AND tournament_name = ?';
+      params.push(tournament);
+    }
+
+    sql += ' ORDER BY match_time ASC';
+    const matches = await queryAll(sql, params);
     res.json(matches);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/matches/tournaments-list', requireAuth, async (req, res) => {
+  try {
+    const rows = await queryAll(`
+      SELECT DISTINCT tournament_name, COUNT(*) as match_count
+      FROM matches
+      WHERE tournament_name != '' AND tournament_name IS NOT NULL
+      GROUP BY tournament_name
+      ORDER BY MIN(match_time) DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/matches/dates', requireAuth, async (req, res) => {
+  try {
+    const rows = await queryAll(`
+      SELECT DISTINCT DATE(match_time) as match_date, tournament_name
+      FROM matches
+      WHERE match_time IS NOT NULL AND status != 'finished'
+      ORDER BY match_date ASC
+    `);
+    const today = getBeijingToday();
+    const dateSet = new Set();
+    const result = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      const beijing = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+      beijing.setDate(beijing.getDate() + i);
+      const ds = `${beijing.getFullYear()}-${String(beijing.getMonth() + 1).padStart(2, '0')}-${String(beijing.getDate()).padStart(2, '0')}`;
+      const hasMatches = rows.some(r => {
+        const rd = r.match_date instanceof Date
+          ? r.match_date.toISOString().slice(0, 10)
+          : String(r.match_date).slice(0, 10);
+        return rd === ds;
+      });
+      result.push({ date: ds, hasMatches, isToday: ds === today });
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -163,7 +237,8 @@ app.post('/api/bet', requireAuth, async (req, res) => {
 app.get('/api/my-bets', requireAuth, async (req, res) => {
   try {
     const bets = await queryAll(`
-      SELECT b.*, m.team1, m.team2, m.status as match_status, m.match_time, m.tournament_name
+      SELECT b.*, m.team1, m.team2, m.status as match_status, m.match_time, m.tournament_name,
+             m.bo_format, m.score1, m.score2
       FROM bets b JOIN matches m ON b.match_id = m.id
       WHERE b.user_id = ? ORDER BY b.created_at DESC
     `, [req.userId]);
@@ -264,6 +339,47 @@ app.get('/api/leaderboard', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/leaderboard/daily', requireAuth, async (req, res) => {
+  try {
+    const today = getBeijingToday();
+    const { start, end } = getBeijingDateRange(today);
+
+    const rows = await queryAll(`
+      SELECT
+        u.id,
+        u.username,
+        COALESCE(SUM(
+          CASE WHEN b.status = 'won' THEN b.payout - b.amount
+               WHEN b.status = 'lost' THEN -b.amount
+               ELSE 0 END
+        ), 0) as bet_profit,
+        COALESCE(SUM(
+          CASE WHEN tp.status = 'won' THEN tp.payout - tp.bet_amount
+               WHEN tp.status = 'lost' THEN -tp.bet_amount
+               ELSE 0 END
+        ), 0) as pred_profit
+      FROM users u
+      LEFT JOIN bets b ON b.user_id = u.id AND b.settled_at >= ? AND b.settled_at <= ?
+      LEFT JOIN tournament_predictions tp ON tp.user_id = u.id AND tp.settled_at >= ? AND tp.settled_at <= ?
+      WHERE u.is_admin = 0
+      GROUP BY u.id, u.username
+      HAVING (COALESCE(SUM(CASE WHEN b.status IN ('won','lost') THEN 1 ELSE 0 END), 0)
+            + COALESCE(SUM(CASE WHEN tp.status IN ('won','lost') THEN 1 ELSE 0 END), 0)) > 0
+      ORDER BY (bet_profit + pred_profit) DESC
+    `, [start, end, start, end]);
+
+    const result = rows.map(r => ({
+      id: r.id,
+      username: r.username,
+      dailyProfit: Number(r.bet_profit) + Number(r.pred_profit)
+    }));
+
+    res.json({ date: today, rankings: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== ADMIN ====================
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
@@ -288,10 +404,30 @@ app.post('/api/admin/users/:id/points', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/matches', requireAdmin, async (req, res) => {
   try {
-    const { team1, team2, matchTime, tournamentName } = req.body;
+    const { team1, team2, matchTime, tournamentName, boFormat } = req.body;
     if (!team1 || !team2) return res.status(400).json({ error: '队伍名称不能为空' });
-    const result = await runSql('INSERT INTO matches (team1, team2, match_time, tournament_name) VALUES (?, ?, ?, ?)', [team1, team2, matchTime || null, tournamentName || '']);
+    const format = boFormat || 'BO3';
+    const result = await runSql(
+      'INSERT INTO matches (team1, team2, match_time, tournament_name, bo_format) VALUES (?, ?, ?, ?, ?)',
+      [team1, team2, matchTime || null, tournamentName || '', format]
+    );
     res.json({ message: '比赛已创建', matchId: result.lastInsertRowid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/matches/update-tournament-name', requireAdmin, async (req, res) => {
+  try {
+    const { oldName, newName } = req.body;
+    if (!newName) return res.status(400).json({ error: '新名称不能为空' });
+    let result;
+    if (oldName) {
+      result = await runSql('UPDATE matches SET tournament_name = ? WHERE tournament_name = ?', [newName, oldName]);
+    } else {
+      result = await runSql("UPDATE matches SET tournament_name = ? WHERE tournament_name != '' AND tournament_name IS NOT NULL", [newName]);
+    }
+    res.json({ message: '赛事名称已更新', updated: result.changes });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -299,11 +435,23 @@ app.post('/api/admin/matches', requireAdmin, async (req, res) => {
 
 app.put('/api/admin/matches/:id', requireAdmin, async (req, res) => {
   try {
-    const { team1, team2, matchTime, tournamentName } = req.body;
+    const { team1, team2, matchTime, tournamentName, boFormat, score1, score2, gameScores } = req.body;
     const match = await queryOne('SELECT * FROM matches WHERE id = ?', [req.params.id]);
     if (!match) return res.status(404).json({ error: '比赛不存在' });
-    await runSql('UPDATE matches SET team1 = ?, team2 = ?, match_time = ?, tournament_name = ? WHERE id = ?',
-      [team1 || match.team1, team2 || match.team2, matchTime || match.match_time, tournamentName !== undefined ? tournamentName : match.tournament_name, req.params.id]);
+    await runSql(
+      `UPDATE matches SET team1 = ?, team2 = ?, match_time = ?, tournament_name = ?,
+       bo_format = ?, score1 = ?, score2 = ?, game_scores = ? WHERE id = ?`,
+      [
+        team1 || match.team1, team2 || match.team2,
+        matchTime || match.match_time,
+        tournamentName !== undefined ? tournamentName : match.tournament_name,
+        boFormat || match.bo_format,
+        score1 !== undefined ? score1 : match.score1,
+        score2 !== undefined ? score2 : match.score2,
+        gameScores !== undefined ? gameScores : match.game_scores,
+        req.params.id
+      ]
+    );
     res.json({ message: '比赛已更新' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -344,12 +492,14 @@ app.post('/api/admin/matches/:id/start', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/matches/:id/resolve', requireAdmin, async (req, res) => {
   try {
-    const { winner } = req.body;
+    const { winner, score1, score2, gameScores } = req.body;
     if (winner !== 1 && winner !== 2) return res.status(400).json({ error: '请选择获胜队伍' });
 
     const match = await queryOne('SELECT * FROM matches WHERE id = ?', [req.params.id]);
     if (!match) return res.status(404).json({ error: '比赛不存在' });
     if (match.status !== 'betting') return res.status(400).json({ error: '只有进行中的比赛可以结算' });
+
+    const now = new Date().toISOString();
 
     const bets = await queryAll('SELECT * FROM bets WHERE match_id = ?', [req.params.id]);
     const totalPool = bets.reduce((sum, b) => sum + b.amount, 0);
@@ -359,16 +509,29 @@ app.post('/api/admin/matches/:id/resolve', requireAdmin, async (req, res) => {
     for (const bet of bets) {
       if (bet.bet_team === winner) {
         const payout = winnerTotal > 0 ? Math.floor((bet.amount / winnerTotal) * totalPool) : 0;
-        await runSql('UPDATE bets SET status = ?, payout = ? WHERE id = ?', ['won', payout, bet.id]);
+        await runSql('UPDATE bets SET status = ?, payout = ?, settled_at = ? WHERE id = ?', ['won', payout, now, bet.id]);
         if (payout > 0) await runSql('UPDATE users SET points = points + ? WHERE id = ?', [payout, bet.user_id]);
       } else {
-        await runSql('UPDATE bets SET status = ?, payout = 0 WHERE id = ?', ['lost', 0, bet.id]);
+        await runSql('UPDATE bets SET status = ?, payout = 0, settled_at = ? WHERE id = ?', ['lost', now, bet.id]);
       }
     }
-    await runSql('UPDATE matches SET status = ?, winner = ? WHERE id = ?', ['finished', winner, req.params.id]);
+
+    const s1 = score1 !== undefined ? score1 : (winner === 1 ? 2 : 0);
+    const s2 = score2 !== undefined ? score2 : (winner === 2 ? 2 : 0);
+    const gs = gameScores || '';
+
+    await runSql(
+      'UPDATE matches SET status = ?, winner = ?, score1 = ?, score2 = ?, game_scores = ? WHERE id = ?',
+      ['finished', winner, s1, s2, gs, req.params.id]
+    );
 
     const winnerTeam = winner === 1 ? match.team1 : match.team2;
-    res.json({ message: `比赛已结算，${winnerTeam} 获胜`, totalPool, winnerCount: winnerBets.length });
+    res.json({
+      message: `比赛已结算，${winnerTeam} 获胜`,
+      totalPool,
+      winnerCount: winnerBets.length,
+      settledAt: now
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -406,6 +569,7 @@ app.post('/api/admin/tournaments/:id/resolve', requireAdmin, async (req, res) =>
     const tournament = await queryOne('SELECT * FROM tournaments WHERE id = ?', [req.params.id]);
     if (!tournament) return res.status(404).json({ error: '锦标赛不存在' });
 
+    const now = new Date().toISOString();
     const results = { champion, runner_up: runnerUp, third_place: thirdPlace, top4, top8, qualify };
 
     for (const [type, teamIds] of Object.entries(results)) {
@@ -415,17 +579,17 @@ app.post('/api/admin/tournaments/:id/resolve', requireAdmin, async (req, res) =>
         const predictions = await queryAll('SELECT * FROM tournament_predictions WHERE tournament_id = ? AND prediction_type = ? AND team_id = ?', [req.params.id, type, teamId]);
         for (const pred of predictions) {
           const payout = pred.bet_amount * MULTIPLIERS[type];
-          await runSql('UPDATE tournament_predictions SET status = ?, payout = ? WHERE id = ?', ['won', payout, pred.id]);
+          await runSql('UPDATE tournament_predictions SET status = ?, payout = ?, settled_at = ? WHERE id = ?', ['won', payout, now, pred.id]);
           await runSql('UPDATE users SET points = points + ? WHERE id = ?', [payout, pred.user_id]);
         }
         const pendingPreds = await queryAll('SELECT * FROM tournament_predictions WHERE tournament_id = ? AND prediction_type = ? AND status = ?', [req.params.id, type, 'pending']);
         for (const pred of pendingPreds) {
-          await runSql('UPDATE tournament_predictions SET status = ?, payout = 0 WHERE id = ?', ['lost', pred.id]);
+          await runSql('UPDATE tournament_predictions SET status = ?, payout = 0, settled_at = ? WHERE id = ?', ['lost', now, pred.id]);
         }
       }
     }
     await runSql('UPDATE tournaments SET status = ? WHERE id = ?', ['finished', req.params.id]);
-    res.json({ message: '锦标赛已结算' });
+    res.json({ message: '锦标赛已结算', settledAt: now });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0a0e17">
+  <meta name="theme-color" content="#0b0f1a">
   <title>电竞竞猜</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="/css/style.css">
@@ -71,15 +71,15 @@
         <!-- Matches Page -->
         <div id="page-matches" class="page active">
           <div class="section-header">
-            <h2>比赛竞猜</h2>
-            <div class="filter-btns">
-              <button class="filter-btn active" data-filter="all">全部</button>
-              <button class="filter-btn" data-filter="upcoming">待开始</button>
-              <button class="filter-btn" data-filter="betting">进行中</button>
-              <button class="filter-btn" data-filter="finished">已结束</button>
+            <h2>赛事中心</h2>
+            <div class="tournament-filter-wrap">
+              <select id="tournament-filter" class="tournament-filter">
+                <option value="">全部赛事</option>
+              </select>
             </div>
           </div>
-          <div id="matches-list" class="card-list"></div>
+          <div class="date-tabs" id="date-tabs"></div>
+          <div id="matches-grouped"></div>
         </div>
 
         <!-- Tournament Page -->
@@ -112,8 +112,10 @@
         <!-- Leaderboard Page -->
         <div id="page-leaderboard" class="page">
           <div class="section-header">
-            <h2>排行榜</h2>
+            <h2>今日盈亏榜</h2>
+            <span id="leaderboard-date" class="lb-date-label"></span>
           </div>
+          <div class="lb-summary" id="lb-summary"></div>
           <div id="leaderboard-list" class="leaderboard"></div>
         </div>
       </div>

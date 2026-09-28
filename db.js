@@ -35,6 +35,10 @@ async function initDb() {
       status TEXT DEFAULT 'upcoming',
       winner INTEGER DEFAULT NULL,
       tournament_name TEXT DEFAULT '',
+      bo_format TEXT DEFAULT 'BO3',
+      score1 INTEGER DEFAULT 0,
+      score2 INTEGER DEFAULT 0,
+      game_scores TEXT DEFAULT '',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -48,6 +52,7 @@ async function initDb() {
       amount INTEGER NOT NULL,
       status TEXT DEFAULT 'pending',
       payout INTEGER DEFAULT 0,
+      settled_at TIMESTAMP DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -80,9 +85,22 @@ async function initDb() {
       bet_amount INTEGER NOT NULL,
       status TEXT DEFAULT 'pending',
       payout INTEGER DEFAULT 0,
+      settled_at TIMESTAMP DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  const alterStatements = [
+    'ALTER TABLE matches ADD COLUMN IF NOT EXISTS bo_format TEXT DEFAULT \'BO3\'',
+    'ALTER TABLE matches ADD COLUMN IF NOT EXISTS score1 INTEGER DEFAULT 0',
+    'ALTER TABLE matches ADD COLUMN IF NOT EXISTS score2 INTEGER DEFAULT 0',
+    'ALTER TABLE matches ADD COLUMN IF NOT EXISTS game_scores TEXT DEFAULT \'\'',
+    'ALTER TABLE bets ADD COLUMN IF NOT EXISTS settled_at TIMESTAMP DEFAULT NULL',
+    'ALTER TABLE tournament_predictions ADD COLUMN IF NOT EXISTS settled_at TIMESTAMP DEFAULT NULL'
+  ];
+  for (const sql of alterStatements) {
+    try { await pool.query(sql); } catch {}
+  }
 
   const adminResult = await pool.query('SELECT id FROM users WHERE is_admin = 1');
   if (adminResult.rows.length === 0) {

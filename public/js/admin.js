@@ -137,13 +137,14 @@ document.getElementById('save-match-btn').addEventListener('click', async () => 
   const team2 = document.getElementById('new-team2').value.trim();
   const matchTime = document.getElementById('new-match-time').value;
   const tournamentName = document.getElementById('new-tournament-name').value.trim();
+  const boFormat = document.getElementById('new-bo-format').value;
 
   if (!team1 || !team2) { showToast('请填写队伍名称', true); return; }
 
   try {
     await api('/api/admin/matches', {
       method: 'POST',
-      body: { team1, team2, matchTime, tournamentName }
+      body: { team1, team2, matchTime, tournamentName, boFormat }
     });
     showToast('比赛已创建');
     addMatchForm.classList.add('hidden');
@@ -151,6 +152,7 @@ document.getElementById('save-match-btn').addEventListener('click', async () => 
     document.getElementById('new-team2').value = '';
     document.getElementById('new-match-time').value = '';
     document.getElementById('new-tournament-name').value = '';
+    document.getElementById('new-bo-format').value = 'BO3';
     loadAdminMatches();
   } catch (err) {
     showToast(err.message, true);
@@ -187,32 +189,37 @@ function renderAdminMatches(matches) {
   list.innerHTML = matches.map(m => {
     const expired = isExpired(m);
     const displayStatus = expired ? 'finished' : m.status;
+    const boFormat = m.bo_format || 'BO3';
+    const hasScores = m.status === 'finished' && (m.score1 || m.score2);
     return `
     <div class="card">
       <div class="match-header">
-        <span class="match-tournament">${esc(m.tournament_name || '友谊赛')}</span>
+        <span class="match-tournament">${esc(m.tournament_name || '友谊赛')} · ${boFormat}</span>
         <span class="match-status status-${displayStatus}">${statusMap[displayStatus]}</span>
       </div>
       <div class="match-teams">
-        <div class="team-name">${esc(m.team1)}</div>
-        <div class="vs-text">VS</div>
-        <div class="team-name">${esc(m.team2)}</div>
+        <div class="team-name">${esc(m.team1)}${m.winner === 1 ? ' <span class="winner-badge">胜</span>' : ''}</div>
+        ${hasScores ? `<div class="vs-text" style="font-size:18px;font-weight:700;color:var(--accent);">${m.score1} : ${m.score2}</div>` : '<div class="vs-text">VS</div>'}
+        <div class="team-name">${esc(m.team2)}${m.winner === 2 ? ' <span class="winner-badge">胜</span>' : ''}</div>
       </div>
       ${m.match_time ? `<div class="match-time">${formatTime(m.match_time)}</div>` : ''}
+      ${m.game_scores ? `<div style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:4px;">小分: ${esc(m.game_scores)}</div>` : ''}
       <div class="match-actions">
         ${m.status === 'upcoming' && !expired ? `
           <button class="btn btn-primary btn-sm" onclick="startMatch(${m.id})">开始比赛</button>
+          <button class="btn btn-sm" onclick="editMatchScores(${m.id})">编辑</button>
           <button class="btn btn-danger btn-sm" onclick="deleteMatch(${m.id})">删除</button>
         ` : ''}
         ${m.status === 'upcoming' && expired ? `
           <button class="btn btn-danger btn-sm" onclick="deleteMatch(${m.id})">删除</button>
         ` : ''}
         ${m.status === 'betting' ? `
-          <button class="btn btn-success btn-sm" onclick="resolveMatch(${m.id}, 1)">${esc(m.team1)} 胜</button>
-          <button class="btn btn-success btn-sm" onclick="resolveMatch(${m.id}, 2)">${esc(m.team2)} 胜</button>
+          <button class="btn btn-success btn-sm" onclick="openResolveModal(${m.id})">结算</button>
+          <button class="btn btn-sm" onclick="editMatchScores(${m.id})">编辑</button>
         ` : ''}
         ${m.status === 'finished' ? `
           <span style="font-size:12px;color:var(--text-muted);">胜者: ${esc(m.winner === 1 ? m.team1 : m.team2)}</span>
+          <button class="btn btn-sm" onclick="editMatchScores(${m.id})">编辑</button>
         ` : ''}
       </div>
     </div>
@@ -228,14 +235,110 @@ window.startMatch = async function(id) {
   } catch (err) { showToast(err.message, true); }
 };
 
-window.resolveMatch = async function(id, winner) {
-  if (!confirm('确认结算此比赛？')) return;
+window.openResolveModal = async function(id) {
+  try {
+    const m = await api(`/api/matches/${id}`);
+    showModal(`结算 - ${m.team1} vs ${m.team2}`, `
+      <div style="margin-bottom:16px;">
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">选择获胜方并填写比分</p>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button class="btn resolve-winner-btn" data-winner="1" style="flex:1;padding:12px;font-size:15px;">${esc(m.team1)}</button>
+          <button class="btn resolve-winner-btn" data-winner="2" style="flex:1;padding:12px;font-size:15px;">${esc(m.team2)}</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="input-group">
+          <label>${esc(m.team1)} 得分</label>
+          <input type="number" id="resolve-score1" min="0" value="${m.score1 || 0}">
+        </div>
+        <div class="input-group">
+          <label>${esc(m.team2)} 得分</label>
+          <input type="number" id="resolve-score2" min="0" value="${m.score2 || 0}">
+        </div>
+      </div>
+      <div class="input-group">
+        <label>每局小分 (用逗号分隔, 如 16-14,13-16,16-8)</label>
+        <input type="text" id="resolve-game-scores" value="${esc(m.game_scores || '')}" placeholder="16-14,13-16,16-8">
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitResolve(${id})" style="margin-top:8px;">确认结算</button>
+    `);
+
+    document.querySelectorAll('.resolve-winner-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.resolve-winner-btn').forEach(b => b.classList.remove('btn-primary'));
+        btn.classList.add('btn-primary');
+      });
+    });
+  } catch (err) { showToast(err.message, true); }
+};
+
+window.submitResolve = async function(id) {
+  const winnerBtn = document.querySelector('.resolve-winner-btn.btn-primary');
+  if (!winnerBtn) { showToast('请选择获胜队伍', true); return; }
+
+  const winner = parseInt(winnerBtn.dataset.winner);
+  const score1 = parseInt(document.getElementById('resolve-score1').value) || 0;
+  const score2 = parseInt(document.getElementById('resolve-score2').value) || 0;
+  const gameScores = document.getElementById('resolve-game-scores').value.trim();
+
+  if (!confirm('确认结算？此操作不可撤销。')) return;
+
   try {
     const data = await api(`/api/admin/matches/${id}/resolve`, {
       method: 'POST',
-      body: { winner }
+      body: { winner, score1, score2, gameScores }
     });
     showToast(data.message);
+    closeModal();
+    loadAdminMatches();
+  } catch (err) { showToast(err.message, true); }
+};
+
+window.editMatchScores = async function(id) {
+  try {
+    const m = await api(`/api/matches/${id}`);
+    showModal(`编辑 - ${m.team1} vs ${m.team2}`, `
+      <div class="form-row">
+        <div class="input-group">
+          <label>${esc(m.team1)} 得分</label>
+          <input type="number" id="edit-score1" min="0" value="${m.score1 || 0}">
+        </div>
+        <div class="input-group">
+          <label>${esc(m.team2)} 得分</label>
+          <input type="number" id="edit-score2" min="0" value="${m.score2 || 0}">
+        </div>
+      </div>
+      <div class="input-group">
+        <label>每局小分 (逗号分隔)</label>
+        <input type="text" id="edit-game-scores" value="${esc(m.game_scores || '')}" placeholder="16-14,13-16,16-8">
+      </div>
+      <div class="input-group">
+        <label>赛制</label>
+        <select id="edit-bo-format">
+          <option value="BO1" ${m.bo_format === 'BO1' ? 'selected' : ''}>BO1</option>
+          <option value="BO3" ${(!m.bo_format || m.bo_format === 'BO3') ? 'selected' : ''}>BO3</option>
+          <option value="BO5" ${m.bo_format === 'BO5' ? 'selected' : ''}>BO5</option>
+          <option value="BO7" ${m.bo_format === 'BO7' ? 'selected' : ''}>BO7</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitEdit(${id})" style="margin-top:8px;">保存</button>
+    `);
+  } catch (err) { showToast(err.message, true); }
+};
+
+window.submitEdit = async function(id) {
+  const score1 = parseInt(document.getElementById('edit-score1').value) || 0;
+  const score2 = parseInt(document.getElementById('edit-score2').value) || 0;
+  const gameScores = document.getElementById('edit-game-scores').value.trim();
+  const boFormat = document.getElementById('edit-bo-format').value;
+
+  try {
+    await api(`/api/admin/matches/${id}`, {
+      method: 'PUT',
+      body: { score1, score2, gameScores, boFormat }
+    });
+    showToast('比赛已更新');
+    closeModal();
     loadAdminMatches();
   } catch (err) { showToast(err.message, true); }
 };
