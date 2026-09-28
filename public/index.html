@@ -2,126 +2,155 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0b0f1a">
+  <meta name="theme-color" content="#0a0e1a">
   <title>电竞竞猜</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
   <div id="app">
-    <!-- Login/Register Screen -->
     <div id="auth-screen" class="screen active">
       <div class="auth-container">
-        <div class="logo">
-          <div class="logo-icon">&#9889;</div>
-          <h1>电竞竞猜</h1>
-          <p class="subtitle">ESPORTS PREDICT</p>
+        <div class="auth-logo">
+          <div class="auth-logo-icon">&#9889;</div>
+          <h1 class="auth-logo-title">电竞竞猜</h1>
+          <p class="auth-logo-sub">ESPORTS PREDICT</p>
         </div>
         <div class="auth-tabs">
-          <button class="tab-btn active" data-tab="login">登录</button>
-          <button class="tab-btn" data-tab="register">注册</button>
+          <button class="auth-tab active" data-tab="login">登录</button>
+          <button class="auth-tab" data-tab="register">注册</button>
         </div>
         <form id="login-form" class="auth-form active">
-          <div class="input-group">
+          <div class="field">
             <input type="text" id="login-username" placeholder="用户名" required autocomplete="username">
           </div>
-          <div class="input-group">
+          <div class="field">
             <input type="password" id="login-password" placeholder="密码" required autocomplete="current-password">
           </div>
-          <button type="submit" class="btn btn-primary btn-full">登录</button>
+          <button type="submit" class="btn btn-primary btn-block">登录</button>
         </form>
         <form id="register-form" class="auth-form">
-          <div class="input-group">
+          <div class="field">
             <input type="text" id="reg-username" placeholder="用户名 (至少2位)" required autocomplete="username">
           </div>
-          <div class="input-group">
+          <div class="field">
             <input type="password" id="reg-password" placeholder="密码 (至少4位)" required autocomplete="new-password">
           </div>
-          <div class="input-group">
+          <div class="field">
             <input type="password" id="reg-password2" placeholder="确认密码" required autocomplete="new-password">
           </div>
-          <button type="submit" class="btn btn-primary btn-full">注册</button>
+          <button type="submit" class="btn btn-primary btn-block">注册</button>
         </form>
-        <div id="auth-error" class="error-msg"></div>
+        <div id="auth-error" class="auth-error"></div>
       </div>
     </div>
 
-    <!-- Main Screen -->
     <div id="main-screen" class="screen">
-      <nav class="navbar">
-        <div class="nav-brand">&#9889; 电竞竞猜</div>
-        <div class="nav-right">
-          <span id="user-points" class="points-badge">0</span>
-          <span id="user-name" class="user-name"></span>
-          <button id="logout-btn" class="btn btn-sm">退出</button>
+      <header class="top-bar">
+        <div class="top-bar-title">&#9889; 电竞竞猜</div>
+        <div class="top-bar-right">
+          <div class="points-chip">
+            <span class="points-chip-label">&#9670;</span>
+            <span id="user-points">0</span>
+          </div>
         </div>
-      </nav>
+      </header>
 
-      <div class="tab-nav">
-        <button class="nav-tab active" data-page="matches">比赛竞猜</button>
-        <button class="nav-tab" data-page="tournament">锦标赛预测</button>
-        <button class="nav-tab" data-page="mybets">我的投注</button>
-        <button class="nav-tab" data-page="leaderboard">排行榜</button>
-      </div>
+      <main class="main-content">
+        <div id="page-home" class="page active">
+          <div class="page-header">
+            <h2>今日赛事</h2>
+            <span id="home-date" class="page-date-label"></span>
+          </div>
+          <div id="home-matches" class="match-list"></div>
+          <div class="home-quick-stats" id="home-quick-stats"></div>
+        </div>
 
-      <div class="content">
-        <!-- Matches Page -->
-        <div id="page-matches" class="page active">
-          <div class="section-header">
-            <h2>赛事中心</h2>
-            <div class="tournament-filter-wrap">
-              <select id="tournament-filter" class="tournament-filter">
+        <div id="page-match" class="page">
+          <div class="page-header">
+            <h2>赛事竞猜</h2>
+            <div class="filter-wrap">
+              <select id="tournament-filter" class="filter-select">
                 <option value="">全部赛事</option>
               </select>
             </div>
           </div>
-          <div class="date-tabs" id="date-tabs"></div>
+          <div class="date-scroll" id="date-tabs"></div>
           <div id="matches-grouped"></div>
         </div>
 
-        <!-- Tournament Page -->
         <div id="page-tournament" class="page">
-          <div class="section-header">
+          <div class="page-header">
             <h2>锦标赛预测</h2>
           </div>
-          <div class="multiplier-info">
-            <span class="badge">冠军 x20</span>
-            <span class="badge">亚军 x10</span>
-            <span class="badge">季军 x7</span>
-            <span class="badge">四强 x4</span>
-            <span class="badge">八强 x3</span>
-            <span class="badge">出线 x2</span>
+          <div class="multiplier-bar">
+            <span class="mult-chip">冠军 x20</span>
+            <span class="mult-chip">亚军 x10</span>
+            <span class="mult-chip">季军 x7</span>
+            <span class="mult-chip">四强 x4</span>
+            <span class="mult-chip">八强 x3</span>
+            <span class="mult-chip">出线 x2</span>
           </div>
           <div id="tournaments-list" class="card-list"></div>
         </div>
 
-        <!-- My Bets Page -->
-        <div id="page-mybets" class="page">
-          <div class="section-header">
-            <h2>我的投注</h2>
+        <div id="page-rank" class="page">
+          <div class="page-header">
+            <h2>排行榜</h2>
           </div>
-          <h3 class="sub-header">比赛投注</h3>
-          <div id="my-bets-list" class="card-list"></div>
-          <h3 class="sub-header">锦标赛预测</h3>
-          <div id="my-predictions-list" class="card-list"></div>
+          <div class="rank-tabs">
+            <button class="rank-tab active" data-type="overall">总榜</button>
+            <button class="rank-tab" data-type="daily">今日盈亏</button>
+          </div>
+          <div id="rank-summary" class="rank-summary"></div>
+          <div id="rank-list" class="rank-list"></div>
         </div>
 
-        <!-- Leaderboard Page -->
-        <div id="page-leaderboard" class="page">
-          <div class="section-header">
-            <h2>今日盈亏榜</h2>
-            <span id="leaderboard-date" class="lb-date-label"></span>
+        <div id="page-profile" class="page">
+          <div class="profile-header" id="profile-header"></div>
+          <div class="profile-stats-grid" id="profile-stats"></div>
+          <div class="profile-section">
+            <h3 class="profile-section-title">投注记录</h3>
+            <div class="profile-sub-tabs">
+              <button class="profile-sub-tab active" data-sub="bets">比赛投注</button>
+              <button class="profile-sub-tab" data-sub="predictions">锦标赛预测</button>
+            </div>
+            <div id="profile-bets-list" class="card-list"></div>
+            <div id="profile-preds-list" class="card-list hidden"></div>
           </div>
-          <div class="lb-summary" id="lb-summary"></div>
-          <div id="leaderboard-list" class="leaderboard"></div>
+          <div class="profile-actions">
+            <button id="logout-btn" class="btn btn-outline btn-block">退出登录</button>
+          </div>
         </div>
-      </div>
+      </main>
+
+      <nav class="bottom-nav">
+        <button class="bottom-nav-item active" data-page="home">
+          <span class="bnav-icon">&#9750;</span>
+          <span class="bnav-label">首页</span>
+        </button>
+        <button class="bottom-nav-item" data-page="match">
+          <span class="bnav-icon">&#9878;</span>
+          <span class="bnav-label">赛事</span>
+        </button>
+        <button class="bottom-nav-item" data-page="tournament">
+          <span class="bnav-icon">&#9733;</span>
+          <span class="bnav-label">锦标赛</span>
+        </button>
+        <button class="bottom-nav-item" data-page="rank">
+          <span class="bnav-icon">&#9813;</span>
+          <span class="bnav-label">排行</span>
+        </button>
+        <button class="bottom-nav-item" data-page="profile">
+          <span class="bnav-icon">&#9786;</span>
+          <span class="bnav-label">我的</span>
+        </button>
+      </nav>
     </div>
 
-    <!-- Modal -->
     <div id="modal-overlay" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
@@ -132,7 +161,6 @@
       </div>
     </div>
 
-    <!-- Toast -->
     <div id="toast" class="toast"></div>
   </div>
 

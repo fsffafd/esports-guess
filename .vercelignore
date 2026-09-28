@@ -1,0 +1,16 @@
+data.db
+functions
+web
+node_modules
+.git
+CloudBase部署指南.txt
+免费部署指南.txt
+腾讯云部署步骤.txt
+快速部署指南.md
+部署指南.md
+启动.bat
+cloudbaserc.json
+db-cloudbase.js
+server.js
+render.yaml
+README.md

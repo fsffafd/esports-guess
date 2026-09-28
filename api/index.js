@@ -339,6 +339,91 @@ app.get('/api/leaderboard', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/leaderboard/overall', requireAuth, async (req, res) => {
+  try {
+    const rows = await queryAll(`
+      SELECT
+        u.id,
+        u.username,
+        u.points,
+        COALESCE(SUM(CASE WHEN b.status = 'won' THEN b.payout - b.amount WHEN b.status = 'lost' THEN -b.amount ELSE 0 END), 0)
+        + COALESCE(SUM(CASE WHEN tp.status = 'won' THEN tp.payout - tp.bet_amount WHEN tp.status = 'lost' THEN -tp.bet_amount ELSE 0 END), 0) as total_profit,
+        COUNT(DISTINCT b.id) + COUNT(DISTINCT tp.id) as total_bets,
+        COUNT(DISTINCT CASE WHEN b.status = 'won' THEN b.id END) + COUNT(DISTINCT CASE WHEN tp.status = 'won' THEN tp.id END) as won_count,
+        COUNT(DISTINCT CASE WHEN b.status = 'lost' THEN b.id END) + COUNT(DISTINCT CASE WHEN tp.status = 'lost' THEN tp.id END) as lost_count
+      FROM users u
+      LEFT JOIN bets b ON b.user_id = u.id
+      LEFT JOIN tournament_predictions tp ON tp.user_id = u.id
+      WHERE u.is_admin = 0
+      GROUP BY u.id, u.username, u.points
+      ORDER BY u.points DESC
+    `);
+    const result = rows.map(r => ({
+      id: r.id,
+      username: r.username,
+      points: r.points,
+      totalProfit: Number(r.total_profit) || 0,
+      totalBets: Number(r.total_bets) || 0,
+      wonCount: Number(r.won_count) || 0,
+      lostCount: Number(r.lost_count) || 0
+    }));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/user/stats', requireAuth, async (req, res) => {
+  try {
+    const user = await queryOne('SELECT id, username, points, created_at FROM users WHERE id = ?', [req.userId]);
+
+    const betStats = await queryOne(`
+      SELECT
+        COUNT(*) as total_bets,
+        COALESCE(SUM(amount), 0) as total_wagered,
+        COALESCE(SUM(CASE WHEN status = 'won' THEN payout - amount WHEN status = 'lost' THEN -amount ELSE 0 END), 0) as bet_profit,
+        COUNT(CASE WHEN status = 'won' THEN 1 END) as won_count,
+        COUNT(CASE WHEN status = 'lost' THEN 1 END) as lost_count,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count
+      FROM bets WHERE user_id = ?
+    `, [req.userId]);
+
+    const predStats = await queryOne(`
+      SELECT
+        COUNT(*) as total_preds,
+        COALESCE(SUM(bet_amount), 0) as total_wagered,
+        COALESCE(SUM(CASE WHEN status = 'won' THEN payout - bet_amount WHEN status = 'lost' THEN -bet_amount ELSE 0 END), 0) as pred_profit,
+        COUNT(CASE WHEN status = 'won' THEN 1 END) as won_count,
+        COUNT(CASE WHEN status = 'lost' THEN 1 END) as lost_count,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count
+      FROM tournament_predictions WHERE user_id = ?
+    `, [req.userId]);
+
+    const totalBets = Number(betStats.total_bets) + Number(predStats.total_preds);
+    const totalWon = Number(betStats.won_count) + Number(predStats.won_count);
+    const totalLost = Number(betStats.lost_count) + Number(predStats.lost_count);
+    const totalPending = Number(betStats.pending_count) + Number(predStats.pending_count);
+    const totalProfit = Number(betStats.bet_profit) + Number(predStats.pred_profit);
+    const totalWagered = Number(betStats.total_wagered) + Number(predStats.total_wagered);
+    const winRate = (totalWon + totalLost) > 0 ? Math.round((totalWon / (totalWon + totalLost)) * 100) : 0;
+
+    res.json({
+      username: user.username,
+      points: user.points,
+      createdAt: user.created_at,
+      totalBets,
+      totalWon,
+      totalLost,
+      totalPending,
+      totalProfit,
+      totalWagered,
+      winRate
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/leaderboard/daily', requireAuth, async (req, res) => {
   try {
     const today = getBeijingToday();
