@@ -537,6 +537,19 @@ app.post('/api/admin/matches/:id/resolve', requireAdmin, async (req, res) => {
   }
 });
 
+app.put('/api/admin/tournaments/:id', requireAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: '锦标赛名称不能为空' });
+    const tournament = await queryOne('SELECT * FROM tournaments WHERE id = ?', [req.params.id]);
+    if (!tournament) return res.status(404).json({ error: '锦标赛不存在' });
+    await runSql('UPDATE tournaments SET name = ? WHERE id = ?', [name, req.params.id]);
+    res.json({ message: '锦标赛名称已更新' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/tournaments', requireAdmin, async (req, res) => {
   try {
     const { name, teams } = req.body;
