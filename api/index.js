@@ -159,27 +159,18 @@ app.get('/api/matches/tournaments-list', requireAuth, async (req, res) => {
 app.get('/api/matches/dates', requireAuth, async (req, res) => {
   try {
     const rows = await queryAll(`
-      SELECT DISTINCT DATE(match_time) as match_date, tournament_name
+      SELECT DISTINCT DATE(match_time) as match_date
       FROM matches
-      WHERE match_time IS NOT NULL AND status != 'finished'
+      WHERE match_time IS NOT NULL
       ORDER BY match_date ASC
     `);
     const today = getBeijingToday();
-    const dateSet = new Set();
-    const result = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date();
-      const beijing = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
-      beijing.setDate(beijing.getDate() + i);
-      const ds = `${beijing.getFullYear()}-${String(beijing.getMonth() + 1).padStart(2, '0')}-${String(beijing.getDate()).padStart(2, '0')}`;
-      const hasMatches = rows.some(r => {
-        const rd = r.match_date instanceof Date
-          ? r.match_date.toISOString().slice(0, 10)
-          : String(r.match_date).slice(0, 10);
-        return rd === ds;
-      });
-      result.push({ date: ds, hasMatches, isToday: ds === today });
-    }
+    const result = rows.map(r => {
+      const ds = r.match_date instanceof Date
+        ? r.match_date.toISOString().slice(0, 10)
+        : String(r.match_date).slice(0, 10);
+      return { date: ds, hasMatches: true, isToday: ds === today };
+    });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -520,12 +511,12 @@ app.post('/api/admin/matches/update-tournament-name', requireAdmin, async (req, 
 
 app.put('/api/admin/matches/:id', requireAdmin, async (req, res) => {
   try {
-    const { team1, team2, matchTime, tournamentName, boFormat, score1, score2, gameScores } = req.body;
+    const { team1, team2, matchTime, tournamentName, boFormat, score1, score2, gameScores, status, winner } = req.body;
     const match = await queryOne('SELECT * FROM matches WHERE id = ?', [req.params.id]);
     if (!match) return res.status(404).json({ error: '比赛不存在' });
     await runSql(
       `UPDATE matches SET team1 = ?, team2 = ?, match_time = ?, tournament_name = ?,
-       bo_format = ?, score1 = ?, score2 = ?, game_scores = ? WHERE id = ?`,
+       bo_format = ?, score1 = ?, score2 = ?, game_scores = ?, status = ?, winner = ? WHERE id = ?`,
       [
         team1 || match.team1, team2 || match.team2,
         matchTime || match.match_time,
@@ -534,6 +525,8 @@ app.put('/api/admin/matches/:id', requireAdmin, async (req, res) => {
         score1 !== undefined ? score1 : match.score1,
         score2 !== undefined ? score2 : match.score2,
         gameScores !== undefined ? gameScores : match.game_scores,
+        status !== undefined ? status : match.status,
+        winner !== undefined ? winner : match.winner,
         req.params.id
       ]
     );
