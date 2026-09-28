@@ -352,6 +352,98 @@ window.deleteMatch = async function(id) {
   } catch (err) { showToast(err.message, true); }
 };
 
+// ==================== BATCH IMPORT ====================
+const batchImportForm = document.getElementById('batch-import-form');
+document.getElementById('batch-import-btn').addEventListener('click', () => {
+  addMatchForm.classList.add('hidden');
+  batchImportForm.classList.toggle('hidden');
+  document.getElementById('batch-import-result').innerHTML = '';
+});
+document.getElementById('batch-import-cancel').addEventListener('click', () => {
+  batchImportForm.classList.add('hidden');
+});
+
+document.getElementById('batch-import-submit').addEventListener('click', async () => {
+  const data = document.getElementById('batch-import-data').value.trim();
+  const defaultTournament = document.getElementById('batch-default-tournament').value.trim();
+  const resultDiv = document.getElementById('batch-import-result');
+
+  if (!data) { showToast('请输入赛程数据', true); return; }
+
+  const lines = data.split('\n').filter(l => l.trim());
+  let success = 0, failed = 0;
+  const errors = [];
+
+  resultDiv.innerHTML = '<span style="color:var(--accent);">正在导入...</span>';
+
+  for (const line of lines) {
+    try {
+      const parsed = parseMatchLine(line.trim(), defaultTournament);
+      if (!parsed) throw new Error('格式错误');
+      await api('/api/admin/matches', { method: 'POST', body: parsed });
+      success++;
+    } catch (err) {
+      failed++;
+      errors.push(`"${line.trim()}" - ${err.message}`);
+    }
+  }
+
+  let html = `<span style="color:var(--success);">成功导入 ${success} 场</span>`;
+  if (failed > 0) {
+    html += `<br><span style="color:var(--danger);">失败 ${failed} 场</span>`;
+    html += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">${errors.map(e => esc(e)).join('<br>')}</div>`;
+  }
+  resultDiv.innerHTML = html;
+
+  if (success > 0) {
+    batchImportForm.classList.add('hidden');
+    document.getElementById('batch-import-data').value = '';
+    document.getElementById('batch-default-tournament').value = '';
+    loadAdminMatches();
+    showToast(`已导入 ${success} 场比赛`);
+  }
+});
+
+function parseMatchLine(line, defaultTournament) {
+  // Format: "队伍1 vs 队伍2, 2026-09-30 17:00, 赛事名称, BO3"
+  // Also supports: "队伍1 vs 队伍2, 2026-09-30 17:00, BO3" (no tournament)
+  const parts = line.split(',').map(s => s.trim());
+  if (parts.length < 2) return null;
+
+  const teamsPart = parts[0];
+  const vsMatch = teamsPart.match(/^(.+?)\s*(?:vs|VS|Vs|v|V)\s*(.+)$/);
+  if (!vsMatch) return null;
+
+  const team1 = vsMatch[1].trim();
+  const team2 = vsMatch[2].trim();
+
+  let matchTime = '';
+  let tournamentName = defaultTournament;
+  let boFormat = 'BO3';
+
+  for (let i = 1; i < parts.length; i++) {
+    const p = parts[i];
+    if (/^\d{4}-\d{2}-\d{2}/.test(p) || /^\d{2}\/\d{2}/.test(p) || /^\d{2}-\d{2}/.test(p)) {
+      matchTime = p;
+    } else if (/^BO\d+$/i.test(p)) {
+      boFormat = p.toUpperCase();
+    } else if (p.length > 0) {
+      tournamentName = p;
+    }
+  }
+
+  if (matchTime && !matchTime.includes('T')) {
+    if (matchTime.includes(' ') && matchTime.includes(':')) {
+      matchTime = matchTime.replace(' ', 'T');
+    } else if (matchTime.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      matchTime = matchTime + 'T00:00';
+    }
+  }
+
+  if (!team1 || !team2) return null;
+  return { team1, team2, matchTime, tournamentName, boFormat };
+}
+
 // ==================== TOURNAMENTS ====================
 const addTournamentForm = document.getElementById('add-tournament-form');
 document.getElementById('add-tournament-btn').addEventListener('click', () => {

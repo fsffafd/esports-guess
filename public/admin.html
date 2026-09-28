@@ -53,7 +53,10 @@
         <div id="page-admin-matches" class="page active">
           <div class="section-header">
             <h2>赛程管理</h2>
-            <button class="btn btn-primary" id="add-match-btn">+ 添加比赛</button>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" id="add-match-btn">+ 添加比赛</button>
+              <button class="btn" id="batch-import-btn" style="background:var(--accent2);">批量导入</button>
+            </div>
           </div>
 
           <div id="add-match-form" class="admin-form hidden">
@@ -94,6 +97,29 @@
               <button class="btn btn-primary" id="save-match-btn">保存</button>
               <button class="btn" id="cancel-match-btn">取消</button>
             </div>
+          </div>
+
+          <div id="batch-import-form" class="admin-form hidden">
+            <h3>批量导入赛程</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+              每行一场比赛，格式：<br>
+              <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:4px;">队伍1 vs 队伍2, 2026-09-30 17:00, 赛事名称, BO3</code>
+            </p>
+            <div class="input-group">
+              <label>默认赛事名称（可留空，以每行为准）</label>
+              <input type="text" id="batch-default-tournament" placeholder="例如: VCT 2026 上海冠军赛">
+            </div>
+            <div class="input-group">
+              <label>赛程数据（每行一场）</label>
+              <textarea id="batch-import-data" rows="8" placeholder="Team Liquid vs Paper Rex, 2026-09-24 17:00, A组小组赛, BO3
+TYLOO vs G2, 2026-09-24 20:00, A组小组赛, BO3
+EDG vs SEN, 2026-09-25 17:00, B组小组赛, BO3"></textarea>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" id="batch-import-submit">导入</button>
+              <button class="btn" id="batch-import-cancel">取消</button>
+            </div>
+            <div id="batch-import-result" style="margin-top:12px;font-size:13px;"></div>
           </div>
 
           <div id="admin-matches-list" class="card-list"></div>
